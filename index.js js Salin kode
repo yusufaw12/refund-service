@@ -1,0 +1,45 @@
+import express from 'express';
+import { createClient } from '@supabase/supabase-js';
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+const supabase = createClient(
+  'https://suzepbctojscizdmacpj.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....'
+);
+
+app.get('/refund', async (req, res) => {
+  const { data: transaksi, error } = await supabase
+    .from('transaksi')
+    .select('*')
+    .eq('status', 'pending');
+
+  if (error) return res.status(500).send('Gagal ambil data');
+
+  const now = new Date();
+  let total = 0;
+
+  for (let t of transaksi) {
+    const waktu = new Date(t.waktu_pemesanan);
+    const selisihHari = (now - waktu) / (1000 * 60 * 60 * 24);
+
+    if (selisihHari >= 3) {
+      await supabase.rpc('refund_saldo', {
+        uid: t.user_id,
+        nominal: t.jumlah
+      });
+
+      await supabase
+        .from('transaksi')
+        .update({ status: 'refunded' })
+        .eq('id', t.id);
+
+      total++;
+    }
+  }
+
+  res.send(`Selesai. Total direfund: ${total}`);
+});
+
+app.listen(PORT, () => console.log(`Running on port ${PORT}`));
